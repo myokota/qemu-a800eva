@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.7: http://docutils.sourceforge.net/" />
+<title>Armadillo-800 EVA エミュレータ</title>
+<link rel="stylesheet" href="images/default.css" type="text/css" />
+</head>
+<body>
+<div class="document" id="armadillo-800-eva">
+<h1 class="title">Armadillo-800 EVA エミュレータ</h1>
+
+<div class="section" id="id1">
+<h1>はじめに</h1>
+<div class="section" id="id2">
+<h2>概要と目的</h2>
+<p>オープンソースのマシンエミュレータである QEMU に、
+Armadillo-800 EVA のエミュレーションを追加しました。</p>
+<p>現行の QEMU には Cortex-A9 エミュレーションがサポートされているため、
+今回、Armadillo-800 EVA 向けの Linux カーネルを起動させることを目標に、
+R-Mobile A1 の固有部分の一部を実装しました。</p>
+<p>R-Mobile A1 はハードウェアマニュアルが一般に公開されていませんが、
+ゲスト OS として Linux カーネルが起動するエミュレータを作成することにより、
+ハードウェアの概要を掴むことが主な目的です。</p>
+</div>
+<div class="section" id="id3">
+<h2>環境とソフトウェアについて</h2>
+<p>ビルド、及び動作確認を行った環境は以下のとおりです。</p>
+<ul class="simple">
+<li>Debian GNU/Linux 6.0.2</li>
+<li>Ubuntu 11.10</li>
+</ul>
+<p>また、今回使用した各種ソフトウェアのバージョンを以下に示します。</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="30%" />
+<col width="70%" />
+</colgroup>
+<thead valign="bottom">
+<tr><th class="head">ソフトウェア</th>
+<th class="head">バージョン</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr><td>QEMU</td>
+<td>1.1.1-1</td>
+</tr>
+<tr><td>Linux カーネル</td>
+<td>2.6.35-a800eva-at2</td>
+</tr>
+<tr><td>Buildroot</td>
+<td>2012.05</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="id4">
+<h1>ビルド手順</h1>
+<div class="section" id="id5">
+<h2>凡例</h2>
+<p>ビルド手順で示されるコマンドラインの種別は以下のとおりです。</p>
+<pre class="literal-block">
+# (特権によるコマンドラインを示します)
+</pre>
+<pre class="literal-block">
+% (非特権のコマンドラインを示します)
+</pre>
+</div>
+<div class="section" id="id6">
+<h2>準備</h2>
+<p>環境に応じてビルドに必要なパッケージを導入します。</p>
+<pre class="literal-block">
+(Debian 6.0.2 システムインストール直後の場合)
+# apt-get install g++ bison flex gettext glib2.0-dev uboot-mkimage
+</pre>
+<pre class="literal-block">
+(Ubuntu 11.10 システムインストール直後の場合)
+# apt-get install g++ bison flex gettext glib2.0-dev u-boot-tools
+</pre>
+<p>必要に応じて作業ディレクトリを作成します。</p>
+<pre class="literal-block">
+% export WORKDIR=~/work
+% mkdir $WORKDIR
+</pre>
+<p>尚、以降の手順では作業ディレクトリ $WORKDIR の作成を前提としています。</p>
+</div>
+<div class="section" id="buildroot">
+<h2>Buildroot</h2>
+<p>Buildroot をビルドします。
+Buildroot では Linux カーネルをビルドするためのツールチェインの取得と、
+ルートファイルシステムを構築を行います。</p>
+<pre class="literal-block">
+% cd $WORKDIR
+% wget http://buildroot.uclibc.org/downloads/buildroot-2012.05.tar.bz2
+% tar xf buildroot-2012.05.tar.bz2
+% cd buildroot-2012.05
+% cat &gt; configs/armadillo800eva_defconfig &lt;&lt; EOF
+&gt; BR2_arm=y
+&gt; BR2_cortex_a9=y
+&gt; BR2_TOOLCHAIN_EXTERNAL=y
+&gt; BR2_TOOLCHAIN_EXTERNAL_CODESOURCERY_ARM2009Q3=y
+&gt; BR2_TARGET_GENERIC_GETTY_PORT=&quot;ttySC1&quot;
+&gt; BR2_TARGET_ROOTFS_CPIO=y
+&gt; BR2_TARGET_ROOTFS_CPIO_GZIP=y
+&gt; EOF
+% make armadillo800eva_defconfig
+% make
+</pre>
+<p>ツールチェインのパスは以下のとおりです。</p>
+<pre class="literal-block">
+$WORKDIR/buildroot-2012.05/output/host/usr/bin/arm-none-linux-gnueabi-*
+</pre>
+<p>initramfs 用のルートファイルシステムの圧縮イメージのパスは以下のとおりです。</p>
+<pre class="literal-block">
+$WORKDIR/buildroot-2012.05/output/images/rootfs.cpio.gz
+</pre>
+</div>
+<div class="section" id="linux">
+<h2>Linux カーネル</h2>
+<p>Linux カーネルと エミュレータ向けのコンフィギュレータを取得します。</p>
+<pre class="literal-block">
+% cd $WORKDIR
+% git clone https://github.com/myokota/linux-a800eva-defconfig-for-qemu.git
+% wget http://armadillo.atmark-techno.com/files/downloads/kernel-source/linux-2.6.35-at/linux-2.6.35-a800eva-at2.tar.gz
+% tar xf linux-2.6.35-a800eva-at2.tar.gz
+% cd linux-2.6.35-a800eva-at2
+% cp $WORKDIR/linux-a800eva-defconfig-for-qemu/armadillo800eva_qemu_defconfig arch/arm/configs
+</pre>
+<p>ソースコード <tt class="docutils literal"><span class="pre">arch/arm/mach-shmobile/board-armadillo800eva.c</span></tt> を以下の様に変更します(<a class="reference external" href="https://gist.github.com/3264852">https://gist.github.com/3264852</a>)。</p>
+<pre class="literal-block">
+--- a/arch/arm/mach-shmobile/board-armadillo800eva.c
++++ b/arch/arm/mach-shmobile/board-armadillo800eva.c
+&#64;&#64; -128,6 +128,7 &#64;&#64; static struct platform_device __maybe_unused usb_func_device
+        .resource       = usb_resources,
+ };
+
++#ifdef CONFIG_MMC
+ static void sdhi0_set_pwr(struct platform_device *pdev, int state)
+ {
+        gpio_set_value(GPIO_PORT107, state);
+&#64;&#64; -304,6 +305,7 &#64;&#64; static struct platform_device sh_mmcif_device = {
+        .num_resources  = ARRAY_SIZE(sh_mmcif_resources),
+        .resource       = sh_mmcif_resources,
+ };
++#endif /* CONFIG_MMC */
+
+ static struct sh_fsi_dma sh_fsi2_dma = {
+        .dma_porta_tx = {
+&#64;&#64; -1044,9 +1046,11 &#64;&#64; static struct platform_device gpio_led = {
+
+ static struct platform_device *rma1evb_devices[] __initdata = {
+        &amp;eth_device,
++#ifdef CONFIG_MMC
+        &amp;sh_mmcif_device,
+        &amp;sdhi0_device,
+        &amp;sdhi1_device,
++#endif
+        //&amp;usb_func_device,
+        &amp;ohci_device,
+        &amp;ehci_device,
+</pre>
+<p>ビルドを行います。</p>
+<pre class="literal-block">
+% export ARCH=arm
+% export CROSS_COMPILE=$WORKDIR/buildroot-2012.05/output/host/usr/bin/arm-none-linux-gnueabi-
+% make armadillo800eva_qemu_defconfig
+% make uImage
+</pre>
+</div>
+<div class="section" id="qemu">
+<h2>QEMU</h2>
+<p>Armadillo-800 EVA エミュレーションを追加した QEMU を取得、ビルドします。</p>
+<pre class="literal-block">
+% cd $WORKDIR
+% git clone https://github.com/myokota/qemu-a800eva.git
+% cd qemu-a800eva
+% ./configure --target-list=arm-softmmu
+% make
+</pre>
+</div>
+</div>
+<div class="section" id="id7">
+<h1>起動方法</h1>
+<p>QEMU はコマンドラインアプリケーションとして起動します。
+また、仮想シリアルポートは標準入出力ではなく、Telnet によるソケット通信で行います。</p>
+<p>以下のコマンドラインで QEMU を起動します。
+尚、TCP ポート 1200 を使用するため、既に使用中の場合はコマンドライン最後のオプション中の数値(1200)を変更してください。</p>
+<pre class="literal-block">
+% $WORKDIR/qemu-a800eva/arm-softmmu/qemu-system-arm \
+      -M a800eva \
+      -kernel $WORKDIR/linux-2.6.35-a800eva-at2/arch/arm/boot/uImage \
+      -initrd $WORKDIR/buildroot-2012.05/output/images/rootfs.cpio.gz \
+      -append &quot;console=ttySC1&quot; \
+      -nographic \
+      -serial telnet:0.0.0.0:1200,server
+</pre>
+<p>コマンドラインを実行すると、</p>
+<pre class="literal-block">
+QEMU waiting for connection on: telnet:0.0.0.0:1200,server
+</pre>
+<p>というメッセージが表示されるので、別の端末から、</p>
+<pre class="literal-block">
+% telnet localhost 1200
+</pre>
+<p>として QEMU の仮想シリアルポートに接続を行います。
+すると、Linux カーネルが起動を開始するので、ログインプロンプトが表示されれば、root にてログイン(パスワードなし)が可能です。</p>
+</div>
+<div class="section" id="id8">
+<h1>エミュレーションの概要</h1>
+<div class="section" id="id9">
+<h2>エミュレーション範囲</h2>
+<p>Armadillo-800 EVA エミュレータのブロック図とメモリマップを以下に示します。</p>
+<img alt="images/block_diagram.png" src="images/block_diagram.png" />
+<img alt="images/memory_map.png" src="images/memory_map.png" />
+<p>全てのデバイスのエミュレーションを実装するには時間を要するため、
+シェルが起動しコマンドを実行できるところまでを今回のゴールとしました。
+従って、最低限の周辺デバイスとして、タイマ、シリアルコントローラのエミュレーションのみに留めています。</p>
+</div>
+<div class="section" id="id10">
+<h2>ゲスト環境</h2>
+<p>QEMU 上にロードするゲスト環境の Linux カーネルは Armadillo-800 EVA 向けの公式ソースコードからビルドしたものを利用します。
+但し、エミュレーションに対応していないデバイスの一部のデバイスドライバは、
+起動中、及び起動後に誤動作を起こしてしまうためコンフィギュレーションから除外します。
+除外するデバイスドライバは以下のとおりです。</p>
+<ul class="simple">
+<li>USB</li>
+<li>MMC</li>
+</ul>
+<p>また、ルートファイルシステムの形式は、各種ストレージのエミュレーションが未対応のため initramfs とし、
+構築には Buildroot を使用します。</p>
+</div>
+</div>
+<div class="section" id="id11">
+<h1>QEMU への実装の概略</h1>
+<div class="section" id="cortex-a9-gic">
+<h2>Cortex-A9/GIC</h2>
+<p>前述のとおり、 Cortex-A9 コアのエミュレーションはサポートされているので流用しています。
+同様に、GIC にサポートされているため、特に今回用の対応の必要はありませんでした。
+但し、 GIC エミュレーションの初期化処理は SoC エミュレーション毎に必要なため、
+R-Mobile A1 向けの GIC の定義を、</p>
+<ul class="simple">
+<li>hw/rmobile-a1.c</li>
+</ul>
+<p>に実装しています。</p>
+</div>
+<div class="section" id="cmt-scif">
+<h2>CMT/SCIF</h2>
+<p>各エミュレーションのソースコードは以下のファイルです。</p>
+<ul class="simple">
+<li>hw/sh_cmt.h</li>
+<li>hw/sh_scif.c</li>
+</ul>
+<p>基本的に Linux カーネルが動作する程度の実装となっています。
+カーネルのソースコードから逆説的にエミュレーションを実装しました。</p>
+<p>尚、現行の QEMU には SH7750(SH-4) のタイマ、シリアルのエミュレーションが既にありますが、
+そのままでは今回の R-Mobile A1 用のカーネルが動作しないため、それらをベースにしつつ、新たにエミュレーションを追加しました。</p>
+<p>可能な限りエミュレーションを一本化してモデル別に処理を分けるようにするのが正当な実装ですが、
+今回はそこまでに至っていません。</p>
+</div>
+<div class="section" id="id12">
+<h2>マシン</h2>
+<p>QEMU では、各周辺デバイスのエミュレーションの他に、CPU ボードなどのシステムの構成を定義する必要がありますが、今回の Armadillo-800 EVA のマシンは、Cortex-A9 を使用した既存のマシンを参考に、
+以下のファイルにて定義を行なっています。</p>
+<ul class="simple">
+<li>hw/a800eva.c</li>
+</ul>
+<p>尚 QEMU では、バスのエミュレーションまでは行わないため、SDRAM は QEMU 内部のバッファに紐付けられます(SRAM も同様)。</p>
+</div>
+</div>
+</div>
+</body>
+</html>
