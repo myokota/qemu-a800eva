@@ -305,3 +305,15 @@ QEMU では、各周辺デバイスのエミュレーションの他に、CPU �
 
 尚 QEMU では、バスのエミュレーションまでは行わないため、SDRAM は QEMU 内部のバッファに紐付けられます(SRAM も同様)。
 
+.. raw:: html
+
+ <hr>
+
+If you have any questions or suggestions, write to *yktmss at gmail dot com*
+
+.. raw:: html
+
+ <hr>
+
+last update: 2012/08/8
+
